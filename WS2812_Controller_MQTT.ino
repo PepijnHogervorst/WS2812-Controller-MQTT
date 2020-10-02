@@ -43,7 +43,8 @@ PubSubClient mqtt_client(server, 1883, callback, ethClient);
 
 
 //----- INITIALISATION -----
-void setup() {
+void setup() 
+{
   // Init serial
   Serial.begin(115200);
   
@@ -109,7 +110,20 @@ void loop() {
 
 //----- EVENTS CALLBACKS -----
 // MQTT callback when message on subscribed topic is received
-void callback(char* topic, byte* payload, unsigned int length) {
-  
+void callback(char* topic, byte* payload, unsigned int length) 
+{
+  // Cast payload to string
+  String content = "";
+  char character;
+  for (int num = 0; num < length; num++) 
+  {
+    character = payload[num];
+    content.concat(character);
+  }
+
+  Serial.print("Topic: ");
+  Serial.println(topic);
+  Serial.print("Payload: ");
+  Serial.println(content);
 }
 //----------------------------
