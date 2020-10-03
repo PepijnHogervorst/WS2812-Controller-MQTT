@@ -22,23 +22,27 @@ const char compile_date[] = __DATE__ " " __TIME__;
 
 //----- PROTOTYPES -----
 void callback(char* topic, byte* payload, unsigned int length);
+void reconnect();
+void keep_alive();
+void decipher_message(char* topic, char payload[]);
+void set_manual_color();
 //----------------------
 
 
 //----- GLOBALS -----
 // doc for JSON parsing, needs memorypool to store json data
-StaticJsonDocument<256> doc;
+StaticJsonDocument<256> doc_receive;
+StaticJsonDocument<256> doc_send;
 
 // Ledstrip object to control WS2812B
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, LEDSTRIP_PIN, NEO_RGB  + NEO_KHZ800);
 
 // Ethernet config arduino!
 byte mac[] = { 0xD1, 0xAD, 0xBE, 0xEF, 0xCE, 0xAE };
-IPAddress ip(192, 168, 68, 56);
-IPAddress server(192, 168, 68, 119);
-
+IPAddress ip(192, 168, 178, 50);
+IPAddress server(192, 168, 178, 2);
 EthernetClient ethClient;
-PubSubClient mqtt_client(server, 1883, callback, ethClient);
+PubSubClient mqtt_client(ethClient);
 //-------------------
 
 
@@ -53,44 +57,113 @@ void setup()
   Serial.println(compile_date);
   Serial.println();
 
-  // Initialize Ethernet and MQTT
-  // Try DHCP
+  // Initialize MQTT config
+  mqtt_client.setServer(server, 1883);
+  mqtt_client.setCallback(callback);
+  
+  // Start ethernet on static IP
   Ethernet.begin(mac, ip);
   
-  if (mqtt_client.connect("arduinoClient", "", ""))
-  {
-    Serial.print("Connected to MQTT broker: ");
-    Serial.print(server);
-    Serial.println("! :)");
+  // Let hardware sort stuff out 
+  delay(1500);
 
-    mqtt_client.subscribe("LED/1/Mode");
-    mqtt_client.subscribe("LED/1/");
+  // Init topics with IO number
+}
+//--------------------------
 
-    mqtt_client.publish("Test", "Arduino is alive");
+
+void loop() {
+  if (!mqtt_client.connected()) {
+    reconnect();
   }
-  else
+  mqtt_client.loop();
+}
+
+
+//----- EVENTS CALLBACKS -----
+// MQTT callback when message on subscribed topic is received
+void callback(char* topic, byte* payload, unsigned int length) 
+{
+  // Cast payload to string
+  char content[length] = "";
+  char character;
+  for (int num = 0; num < length; num++) 
   {
-    Serial.print("Failed to connect to MQTT broker: ");
-    Serial.println(server);
+    //character = payload[num];
+    content[num] = payload[num];
   }
 
-  // Example JSON parsing
-  char json[] = "{\"red\":255,\"green\":128,\"blue\":0}";
+  Serial.println("Received msg!");
+  Serial.print("Topic: ");
+  Serial.println(topic);
+  Serial.print("Payload: ");
+  Serial.println(content);
 
-  // Deserialize json using doc
-  DeserializationError exception = deserializeJson(doc, json);
+  // Parse payload
+  decipher_message(topic, content);
+}
+//----------------------------
 
-  // Check if success
+//----- FUNCTIONS -----
+void reconnect() 
+{
+  // Loop until we're reconnected
+  while (!mqtt_client.connected()) {
+    // Attempt to connect
+    if (mqtt_client.connect("arduinoClient")) 
+    {
+      Serial.println("Connected to MQTT broker!");
+      
+      // Once connected, resubscribe to topics:
+      mqtt_client.subscribe("LED/1/Mode");
+      mqtt_client.subscribe("LED/1/Manual/#");
+      
+      // Publish status / keep alive
+      mqtt_client.publish("LED/1/Status", "Alive");
+    } else {
+      Serial.print("failed to connect to mqtt broker, rc=");
+      Serial.print(mqtt_client.state());
+      
+      // Wait 3 seconds before retrying
+      delay(3000);
+    }
+  }
+}
+
+void keep_alive()
+{
+
+}
+
+void decipher_message(char* topic, char payload[])
+{
+  // Deserialize json
+  DeserializationError exception = deserializeJson(doc_receive, payload);
+  
+  // Check for succes of deserialization
   if (exception)
   {
-    Serial.print(F("deserializeJson() failed: "));
-    Serial.println(exception.c_str());
+    Serial.println("Failed to deserialize JSON");
     return;
   }
 
-  uint8_t red = doc["red"];
-  uint8_t green = doc["green"];
-  uint8_t blue = doc["blue"];
+  // Compare topic!
+  uint8_t result = strcmp(topic, "LED/1/Manual/Color");
+  if (result == 0)
+  {
+    set_manual_color();
+  }
+  Serial.print("strcmp(str1, str2) = ");
+  Serial.println(result);
+  
+}
+
+// Make sure doc_receive is deserialized properly!
+void set_manual_color()
+{
+  uint8_t red = doc_receive["Red"];
+  uint8_t green = doc_receive["Green"];
+  uint8_t blue = doc_receive["Blue"];
 
   Serial.println("RGB values: ");
   Serial.print("Red: ");
@@ -100,30 +173,4 @@ void setup()
   Serial.print("Blue: ");
   Serial.println(blue);
 }
-//--------------------------
-
-
-void loop() {
-    mqtt_client.loop();
-}
-
-
-//----- EVENTS CALLBACKS -----
-// MQTT callback when message on subscribed topic is received
-void callback(char* topic, byte* payload, unsigned int length) 
-{
-  // Cast payload to string
-  String content = "";
-  char character;
-  for (int num = 0; num < length; num++) 
-  {
-    character = payload[num];
-    content.concat(character);
-  }
-
-  Serial.print("Topic: ");
-  Serial.println(topic);
-  Serial.print("Payload: ");
-  Serial.println(content);
-}
-//----------------------------
+//---------------------
