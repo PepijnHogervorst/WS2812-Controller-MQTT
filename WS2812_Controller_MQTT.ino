@@ -200,6 +200,10 @@ void decipher_message(char* topic, char payload[])
   {
     set_mode();
   }
+  else if (strcmp(topic, topic_led_brightness) == 0)
+  {
+    set_brightness();
+  }
   
 }
 
@@ -234,6 +238,15 @@ void set_mode()
     Serial.println("Set mode to: AUTO");
     controller_mode = 1;
   }
+}
+
+void set_brightness()
+{
+  uint8_t brightness = doc_receive["Brightness"];
+  pixels.setBrightness(brightness);
+
+  Serial.print("Brightness set to: ");
+  Serial.println(brightness);
 }
 
 void init_address_topics()
