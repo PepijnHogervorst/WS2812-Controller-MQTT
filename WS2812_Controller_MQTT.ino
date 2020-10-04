@@ -150,6 +150,7 @@ void reconnect()
       // Once connected, resubscribe to topics:
       mqtt_client.subscribe(topic_led_mode);
       mqtt_client.subscribe(topic_led_manual_color);
+      mqtt_client.subscribe(topic_led_brightness);
       
       // Publish status / keep alive
       mqtt_client.publish(topic_led_status, "Alive");
