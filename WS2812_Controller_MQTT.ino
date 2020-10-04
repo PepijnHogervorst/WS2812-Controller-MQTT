@@ -26,6 +26,8 @@ void reconnect();
 void keep_alive();
 void decipher_message(char* topic, char payload[]);
 void set_manual_color();
+void set_mode();
+void init_address_topics();
 //----------------------
 
 
@@ -40,9 +42,24 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, LEDSTRIP_PIN, NEO_RGB  +
 // Ethernet config arduino!
 byte mac[] = { 0xD1, 0xAD, 0xBE, 0xEF, 0xCE, 0xAE };
 IPAddress ip(192, 168, 178, 50);
-IPAddress server(192, 168, 178, 2);
+IPAddress server(192, 168, 178, 100);
 EthernetClient ethClient;
 PubSubClient mqtt_client(ethClient);
+
+// Topics for MQTT
+char topic_led_mode[30];
+char topic_led_manual_color[30];
+char topic_led_status[30];
+char topic_led_brightness[30];
+
+// Manual mode variables
+uint8_t controller_mode = 0; // <- 0 = manual 1=auto
+uint8_t manual_color_red = 0;
+uint8_t manual_color_green = 0;
+uint8_t manual_color_blue = 0;
+
+// General variables
+unsigned long prev_keep_alive;
 //-------------------
 
 
@@ -57,6 +74,9 @@ void setup()
   Serial.println(compile_date);
   Serial.println();
 
+  // Init address using input reg
+  init_address_topics();
+  
   // Initialize MQTT config
   mqtt_client.setServer(server, 1883);
   mqtt_client.setCallback(callback);
@@ -67,7 +87,10 @@ void setup()
   // Let hardware sort stuff out 
   delay(1500);
 
-  // Init topics with IO number
+  // Init ledstrip off
+  pixels.setBrightness(100);
+  pixels.clear();
+  pixels.show();
 }
 //--------------------------
 
@@ -77,6 +100,16 @@ void loop() {
     reconnect();
   }
   mqtt_client.loop();
+
+  // KeepAlive message
+  keep_alive();
+  
+  // Do program according to mode
+  if (controller_mode == 0) 
+  {
+    // Manual mode!
+    manual_mode();
+  }
 }
 
 
@@ -115,12 +148,14 @@ void reconnect()
       Serial.println("Connected to MQTT broker!");
       
       // Once connected, resubscribe to topics:
-      mqtt_client.subscribe("LED/1/Mode");
-      mqtt_client.subscribe("LED/1/Manual/#");
+      mqtt_client.subscribe(topic_led_mode);
+      mqtt_client.subscribe(topic_led_manual_color);
       
       // Publish status / keep alive
-      mqtt_client.publish("LED/1/Status", "Alive");
-    } else {
+      mqtt_client.publish(topic_led_status, "Alive");
+    } 
+    else 
+    {
       Serial.print("failed to connect to mqtt broker, rc=");
       Serial.print(mqtt_client.state());
       
@@ -132,7 +167,13 @@ void reconnect()
 
 void keep_alive()
 {
+  unsigned long current_time = millis();
 
+  if ((current_time - prev_keep_alive) >= 1000)
+  {
+    mqtt_client.publish(topic_led_status, "Alive");
+    prev_keep_alive = current_time;
+  }
 }
 
 void decipher_message(char* topic, char payload[])
@@ -143,34 +184,90 @@ void decipher_message(char* topic, char payload[])
   // Check for succes of deserialization
   if (exception)
   {
-    Serial.println("Failed to deserialize JSON");
+    Serial.println("Failed to deserialize JSON..");
     return;
   }
 
   // Compare topic!
-  uint8_t result = strcmp(topic, "LED/1/Manual/Color");
-  if (result == 0)
+  if (strcmp(topic, topic_led_manual_color) == 0)
   {
     set_manual_color();
   }
-  Serial.print("strcmp(str1, str2) = ");
-  Serial.println(result);
+  else if (strcmp(topic, topic_led_mode) == 0)
+  {
+    set_mode();
+  }
   
 }
 
 // Make sure doc_receive is deserialized properly!
 void set_manual_color()
 {
-  uint8_t red = doc_receive["Red"];
-  uint8_t green = doc_receive["Green"];
-  uint8_t blue = doc_receive["Blue"];
+  manual_color_red    = doc_receive["Red"];
+  manual_color_green  = doc_receive["Green"];
+  manual_color_blue   = doc_receive["Blue"];
 
   Serial.println("RGB values: ");
   Serial.print("Red: ");
-  Serial.println(red);
+  Serial.println(manual_color_red);
   Serial.print("Green: ");
-  Serial.println(green);
+  Serial.println(manual_color_green);
   Serial.print("Blue: ");
-  Serial.println(blue);
+  Serial.println(manual_color_blue);
+}
+
+void set_mode()
+{
+  const char* mode = doc_receive["Mode"];
+
+  if (strcmp(mode, "Manual") == 0)
+  {
+    // Set manual mode
+    Serial.println("Set mode to: MANUAL");
+    controller_mode = 0;
+  }
+  else if (strcmp(mode, "Auto") == 0)
+  {
+    Serial.println("Set mode to: AUTO");
+    controller_mode = 1;
+  }
+}
+
+void init_address_topics()
+{
+  // Set register to all inputs -> 0
+  DDRK = B00000000;
+  
+  // Read out the input port
+  uint8_t portValue = PINK;
+  char val[4];
+  itoa(portValue, val, 10);
+
+  // Set topic address
+  String prefix = String("LED/");
+  String buf;
+  Serial.print("Node Address = ");
+  Serial.println(val);
+
+  buf = prefix + val + "/Mode";
+  buf.toCharArray(topic_led_mode, buf.length() + 1);
+
+  buf = prefix + val + "/Brightness";
+  buf.toCharArray(topic_led_brightness, buf.length() + 1);
+
+  buf = prefix + val + "/Manual/Color";
+  buf.toCharArray(topic_led_manual_color, buf.length() + 1);
+
+  buf = prefix + val + "/Status";
+  buf.toCharArray(topic_led_status, buf.length() + 1);
+}
+
+void manual_mode()
+{
+  for (uint16_t i = 0; i < pixels.numPixels(); i++)
+  {
+    pixels.setPixelColor(i, manual_color_red, manual_color_green, manual_color_blue);
+  }
+  pixels.show();
 }
 //---------------------
