@@ -169,9 +169,12 @@ void keep_alive()
 {
   unsigned long current_time = millis();
 
+  // Check time elapsed is more than 1 sec
   if ((current_time - prev_keep_alive) >= 1000)
   {
+    // Publish alive message
     mqtt_client.publish(topic_led_status, "Alive");
+    // Update prev time
     prev_keep_alive = current_time;
   }
 }
