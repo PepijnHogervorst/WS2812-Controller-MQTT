@@ -173,8 +173,14 @@ void keep_alive()
   // Check time elapsed is more than 1 sec
   if ((current_time - prev_keep_alive) >= 1000)
   {
+    char send_buf[100];
+    doc_send.clear();
+    doc_send["State"] = "Alive";
+    doc_send["Type"] = "WS2812B";
+    doc_send["LedCount"] = pixels.numPixels();
     // Publish alive message
-    mqtt_client.publish(topic_led_status, "Alive");
+    serializeJson(doc_send, send_buf);
+    mqtt_client.publish(topic_led_status, send_buf);
     // Update prev time
     prev_keep_alive = current_time;
   }
