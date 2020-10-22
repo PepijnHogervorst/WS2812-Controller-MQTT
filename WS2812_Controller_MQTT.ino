@@ -41,8 +41,8 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, LEDSTRIP_PIN, NEO_RGB  +
 
 // Ethernet config arduino!
 byte mac[] = { 0xD1, 0xAD, 0xBE, 0xEF, 0xCE, 0xAE };
-IPAddress ip(192, 168, 178, 50);
-IPAddress server(192, 168, 178, 100);
+IPAddress ip(192, 168, 68, 90);
+IPAddress server(192, 168, 68, 119);
 EthernetClient ethClient;
 PubSubClient mqtt_client(ethClient);
 
@@ -83,6 +83,8 @@ void setup()
   
   // Start ethernet on static IP
   Ethernet.begin(mac, ip);
+  Serial.print("Arduino ip=");
+  Serial.println(ip);
   
   // Let hardware sort stuff out 
   delay(1500);
@@ -159,6 +161,8 @@ void reconnect()
     {
       Serial.print("failed to connect to mqtt broker, rc=");
       Serial.print(mqtt_client.state());
+      Serial.print(" ip server=");
+      Serial.println(server);
       
       // Wait 3 seconds before retrying
       delay(3000);
